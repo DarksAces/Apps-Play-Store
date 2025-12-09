@@ -3,8 +3,43 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../services/auth_service.dart';
 
-class AuthScreen extends StatelessWidget {
+class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
+
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLogin = true;
+  bool _isLoading = false;
+
+  Future<void> _submit() async {
+    setState(() => _isLoading = true);
+    try {
+      if (_isLogin) {
+        await AuthService().signInWithEmailAndPassword(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+      } else {
+        await AuthService().signUpWithEmailAndPassword(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +78,7 @@ class AuthScreen extends StatelessWidget {
                 
                 // Welcome Text
                 Text(
-                  'Find Your Spark',
+                  _isLogin ? 'Welcome Back' : 'Create Account',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -66,6 +101,7 @@ class AuthScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         TextFormField(
+                          controller: _emailController,
                           decoration: InputDecoration(
                             labelText: 'Email',
                             prefixIcon: const Icon(Icons.email_outlined),
@@ -76,6 +112,7 @@ class AuthScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
+                          controller: _passwordController,
                           obscureText: true,
                           decoration: InputDecoration(
                             labelText: 'Password',
@@ -88,22 +125,22 @@ class AuthScreen extends StatelessWidget {
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              // Handled by FAB in MainWrapper for demo,
-                              // but realistically would call Auth provider here.
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Click the FAB to "Login" (Demo)')),
-                              );
-                            },
-                            child: const Text('Login'),
+                          child: _isLoading 
+                          ? const Center(child: CircularProgressIndicator())
+                          : ElevatedButton(
+                            onPressed: _submit,
+                            child: Text(_isLogin ? 'Login' : 'Sign Up'),
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            setState(() {
+                              _isLogin = !_isLogin;
+                            });
+                          },
                           child: Text(
-                            'Forgot Password?',
+                            _isLogin ? 'Create new account' : 'I already have an account',
                            style: TextStyle(color: Theme.of(context).primaryColor),
                           ),
                         ),
@@ -114,30 +151,31 @@ class AuthScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 
                 // Social Login
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _SocialButton(
-                      icon: FontAwesomeIcons.google, 
-                      onPressed: () async {
-                         // Import AuthService first
-                         // This is a quick inline fix, ideally use Provider/DI
-                         try {
-                           final auth = AuthService(); // Or context.read<AuthService>()
-                           await auth.signInWithGoogle();
-                         } catch (e) {
-                           ScaffoldMessenger.of(context).showSnackBar(
-                             SnackBar(content: Text('Sign in failed: $e')),
-                           );
-                         }
-                      }
-                    ),
-                    const SizedBox(width: 20),
-                    _SocialButton(icon: FontAwesomeIcons.apple, onPressed: () {}),
-                    const SizedBox(width: 20),
-                    _SocialButton(icon: FontAwesomeIcons.facebookF, onPressed: () {}),
-                  ],
-                ),
+                if (_isLogin) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _SocialButton(
+                        icon: FontAwesomeIcons.google, 
+                        onPressed: () async {
+                           try {
+                             await AuthService().signInWithGoogle();
+                           } catch (e) {
+                             if (context.mounted) {
+                               ScaffoldMessenger.of(context).showSnackBar(
+                                 SnackBar(content: Text('Sign in failed: $e')),
+                               );
+                             }
+                           }
+                        }
+                      ),
+                      const SizedBox(width: 20),
+                      _SocialButton(icon: FontAwesomeIcons.apple, onPressed: () {}), // Placeholder
+                      const SizedBox(width: 20),
+                      _SocialButton(icon: FontAwesomeIcons.facebookF, onPressed: () {}), // Placeholder
+                    ],
+                  ),
+                ]
               ],
             ),
           ),

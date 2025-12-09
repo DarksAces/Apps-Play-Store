@@ -5,10 +5,12 @@ import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/questions_screen.dart';
+import 'screens/matches_screen.dart'; // Added import
 import 'screens/profile_screen.dart';
 
 import 'services/database_service.dart';
-import 'services/auth_service.dart'; // Add this import
+import 'services/auth_service.dart';
+import 'services/purchase_service.dart'; // Added PurchaseService import
 import 'package:firebase_core/firebase_core.dart'; 
 import 'package:firebase_auth/firebase_auth.dart'; // Ensure FirebaseAuth is imported
 import 'models/models.dart' as app_models; // Alias to avoid conflict if any
@@ -25,7 +27,14 @@ void main() async {
   } catch (e) {
     print('Firebase initialization failed (Expected if config not done): $e');
   }
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => PurchaseService()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -85,7 +94,7 @@ class MainNavigationWrapper extends StatelessWidget {
       imageUrl: user.photoURL ?? 'https://via.placeholder.com/150',
       photos: [],
     );
-    DatabaseService().saveUser(appUser);
+    DatabaseService().ensureUserExists(appUser);
   }
 }
 
@@ -143,6 +152,7 @@ class _AppScaffoldState extends State<AppScaffold> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
+    const MatchesScreen(), // Added MatchesScreen
     const QuestionsScreen(),
     const ProfileScreen(),
   ];
@@ -165,6 +175,10 @@ class _AppScaffoldState extends State<AppScaffold> {
           NavigationDestination(
             icon: FaIcon(FontAwesomeIcons.fire),
             label: 'Discover',
+          ),
+          NavigationDestination(
+            icon: FaIcon(FontAwesomeIcons.solidHeart), // Icon for Matches
+            label: 'Matches',
           ),
           NavigationDestination(
             icon: FaIcon(FontAwesomeIcons.bolt),
