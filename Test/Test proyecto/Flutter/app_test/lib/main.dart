@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart'; 
 import 'package:intl/intl.dart'; 
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 // 🔒 IMPORTS DE FIREBASE
 import 'package:firebase_core/firebase_core.dart'; 
@@ -65,6 +66,9 @@ Future<void> main() async {
     print("❌ Error al inicializar Firebase: $e");
     print("Stack: $stackTrace");
   }
+  
+  // 💰 INICIALIZAR ADS
+  MobileAds.instance.initialize();
   
   await Permission.location.request();
   
@@ -230,6 +234,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
+// 🔑 GLOBAL KEY para controlar el mapa desde fuera
+final GlobalKey<_MapGameScreenState> mapKey = GlobalKey<_MapGameScreenState>();
+
 class MainLayout extends StatefulWidget {
   final String username;
   const MainLayout({super.key, required this.username});
@@ -238,13 +245,12 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
-  // REMOVIDO: Definición de _pages fuera del build (Error de context)
   
   @override
   Widget build(BuildContext context) {
     // Definimos _pages dentro del build method para usar context
     final List<Widget> _pages = [
-      const MapGameScreen(), 
+      MapGameScreen(key: mapKey), 
       Center(
         child: Text(
           "Perfil de ${Provider.of<UserProvider>(context, listen: false).nickname}"
@@ -254,7 +260,28 @@ class _MainLayoutState extends State<MainLayout> {
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
-      // ... (rest of the build method)
+      
+      // 🟢 FAB CENTRAL "AÑADIR"
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppTheme.accent,
+        foregroundColor: AppTheme.primary,
+        elevation: 4,
+        shape: CircleBorder(), 
+        onPressed: () {
+           // Cambiar a pestaña mapa si no estamos ahí
+           if (_currentIndex != 0) {
+             setState(() => _currentIndex = 0);
+           }
+           // Activar modo añadir en el mapa
+           // Usamos un pequeño delay para asegurar que el mapa está visible
+           Future.delayed(const Duration(milliseconds: 100), () {
+             mapKey.currentState?.toggleAddMode();
+           });
+        },
+        child: const Icon(LucideIcons.plus, size: 30),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
@@ -287,16 +314,42 @@ class _MapGameScreenState extends State<MapGameScreen> {
   List<Map<String, dynamic>> liveStops = []; 
   StreamSubscription? _firestoreSubscription; 
 
+  // 💰 ADS VARIABLES
+  BannerAd? _bannerAd;
+  bool _isAdLoaded = false;
+  final String _adUnitId = 'ca-app-pub-1010396967965305/1291436259'; // REAL ID Banner
+
   @override
   void initState() {
     super.initState();
     _initLocation();
     _listenToFirestore();
+    _loadBannerAd();
+  }
+
+  void _loadBannerAd() {
+    _bannerAd = BannerAd(
+      adUnitId: _adUnitId,
+      request: const AdRequest(),
+      size: AdSize.banner,
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          setState(() {
+            _isAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (ad, err) {
+          ad.dispose();
+          print('Failed to load a banner ad: ${err.message}');
+        },
+      ),
+    )..load();
   }
 
   @override
   void dispose() {
     _firestoreSubscription?.cancel();
+    _bannerAd?.dispose();
     super.dispose();
   }
 
@@ -396,9 +449,9 @@ class _MapGameScreenState extends State<MapGameScreen> {
     for (var stop in liveStops) {
       await circleAnnotationManager?.create(CircleAnnotationOptions(
         geometry: Point(coordinates: Position(stop['lng'], stop['lat'])),
-        circleColor: AppTheme.error.value, // Rojo
-        circleRadius: 10.0, // TAMAÑO REDUCIDO
-        circleStrokeWidth: 3.0,
+        circleColor: const Color(0xFFFF4081).value, // Rojo Rosado
+        circleRadius: 6.0, // TAMAÑO REDUCIDO (6.0)
+        circleStrokeWidth: 2.0, // Borde un poco más fino también
         circleStrokeColor: Colors.white.value,
       ));
     }
@@ -426,6 +479,14 @@ class _MapGameScreenState extends State<MapGameScreen> {
         });
       });
     }
+  }
+
+  // 🔓 Método público para activar modo desde fuera
+  void toggleAddMode() {
+    setState(() {
+      _isSelectingLocation = !_isSelectingLocation;
+      selectedStop = null;
+    });
   }
 
   @override
@@ -462,37 +523,35 @@ class _MapGameScreenState extends State<MapGameScreen> {
             ),
           ),
 
-        // 🟢 BOTONES DE ACCIÓN (Añadir/Cancelar/Confirmar)
-        Positioned(
-          top: 60,
-          right: 15,
-          child: Column(
-            children: [
-              if (_isSelectingLocation)
-                FloatingActionButton(
+        // 🟢 BOTONES DE ACCIÓN (Confirmar / Cancelar) - SOLO VISIBLES EN MODO SELECCIÓN
+        if (_isSelectingLocation)
+          Positioned(
+            bottom: 150, // Un poco más arriba del FAB central
+            left: 0, 
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                 FloatingActionButton.extended(
+                  heroTag: 'cancel_stop_btn',
+                  backgroundColor: AppTheme.error,
+                  foregroundColor: Colors.white,
+                  onPressed: toggleAddMode,
+                  label: const Text("Cancelar"),
+                  icon: const Icon(LucideIcons.x),
+                ),
+                const SizedBox(width: 20),
+                FloatingActionButton.extended(
                   heroTag: 'confirm_stop_btn',
                   backgroundColor: AppTheme.primary,
                   foregroundColor: AppTheme.textLight,
                   onPressed: _confirmLocation,
-                  child: Icon(LucideIcons.check),
+                  label: const Text("Confirmar"),
+                  icon: const Icon(LucideIcons.check),
                 ),
-                const SizedBox(height: 10),
-              
-              FloatingActionButton(
-                heroTag: 'add_stop_btn',
-                backgroundColor: _isSelectingLocation ? AppTheme.error : AppTheme.accent,
-                foregroundColor: _isSelectingLocation ? AppTheme.textLight : AppTheme.primary,
-                onPressed: () {
-                  setState(() {
-                    _isSelectingLocation = !_isSelectingLocation;
-                    selectedStop = null; 
-                  });
-                },
-                child: Icon(_isSelectingLocation ? LucideIcons.x : LucideIcons.plus),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
         if (selectedStop != null && !_isSelectingLocation) 
           Positioned(
@@ -501,7 +560,22 @@ class _MapGameScreenState extends State<MapGameScreen> {
               stop: selectedStop!, 
               onClose: () => setState(() => selectedStop = null)
             ),
-          )
+          ),
+
+        // 💰 BANNER AD (Top)
+        if (_isAdLoaded && _bannerAd != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: SizedBox(
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            ),
+          ),
       ],
     );
   }

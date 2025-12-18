@@ -51,11 +51,11 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAHcaIdbiGKOzYuZGjPlFP4GlS4gSad9fw',
-    appId: '1:30632730598:android:b567c9426c549a99628027',
-    messagingSenderId: '30632730598',
-    projectId: 'jovi-45c79',
-    storageBucket: 'jovi-45c79.firebasestorage.app',
+    apiKey: 'AIzaSyB7DD_Y9u_RglHkRh6nMlxlBcnFXW12cmk',
+    appId: '1:471846902422:android:34a1a20d8adefadfd8c0b7',
+    messagingSenderId: '471846902422',
+    projectId: 'app-test-c2cad',
+    storageBucket: 'app-test-c2cad.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

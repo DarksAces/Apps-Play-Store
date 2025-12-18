@@ -1,4 +1,4 @@
-package com.example.jovi_app
+package com.example.app_test
 
 import io.flutter.embedding.android.FlutterActivity
 
