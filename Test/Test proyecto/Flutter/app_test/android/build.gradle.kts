@@ -1,13 +1,3 @@
-// android/build.gradle.kts
-
-plugins {
-    // Definimos el plugin aquí para que esté disponible para el módulo :app
-    id("com.google.gms.google-services") version "4.4.0" apply false 
-    
-    // NOTA: Si usas Kotlin en el proyecto, el plugin de Kotlin también debería definirse aquí.
-    // id("org.jetbrains.kotlin.android") version "1.8.0" apply false 
-}
-
 allprojects {
     repositories {
         google()
