@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart'; 
 import 'package:intl/intl.dart'; 
-import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:startapp_sdk/startapp.dart';
 
 // 🔒 IMPORTS DE FIREBASE
 import 'package:firebase_core/firebase_core.dart'; 
@@ -66,9 +66,6 @@ Future<void> main() async {
     print("❌ Error al inicializar Firebase: $e");
     print("Stack: $stackTrace");
   }
-  
-  // 💰 INICIALIZAR ADS
-  MobileAds.instance.initialize();
   
   await Permission.location.request();
   
@@ -314,43 +311,18 @@ class _MapGameScreenState extends State<MapGameScreen> {
   List<Map<String, dynamic>> liveStops = []; 
   StreamSubscription? _firestoreSubscription; 
 
-  // 💰 ADS VARIABLES
-  BannerAd? _bannerAd;
-  bool _isAdLoaded = false;
-  final String _adUnitId = 'ca-app-pub-1010396967965305/1291436259'; // REAL ID Banner
+  // 💰 ADS VARIABLES (Start.io)
+  var startAppSdk = StartAppSdk();
+  dynamic _startAppBannerAd;
 
   @override
   void initState() {
     super.initState();
     _initLocation();
     _listenToFirestore();
-    _loadBannerAd();
-  }
-
-  void _loadBannerAd() {
-    _bannerAd = BannerAd(
-      adUnitId: _adUnitId,
-      request: const AdRequest(),
-      size: AdSize.banner,
-      listener: BannerAdListener(
-        onAdLoaded: (_) {
-          setState(() {
-            _isAdLoaded = true;
-          });
-        },
-        onAdFailedToLoad: (ad, err) {
-          ad.dispose();
-          print('Failed to load a banner ad: ${err.message}');
-        },
-      ),
-    )..load();
-  }
-
-  @override
-  void dispose() {
-    _firestoreSubscription?.cancel();
-    _bannerAd?.dispose();
-    super.dispose();
+    // startAppSdk.setTestAdsEnabled(true); // Desactivado para producción
+    _loadStartAppBanner();
+    _loadStartAppInterstitial(); 
   }
 
   void _listenToFirestore() {
@@ -403,6 +375,60 @@ class _MapGameScreenState extends State<MapGameScreen> {
     });
   }
 
+  void _loadStartAppBanner() {
+    print("Trying to load StartApp Banner...");
+    startAppSdk.loadBannerAd(StartAppBannerType.BANNER).then((ad) {
+      print("✅ StartApp Banner Loaded!");
+      setState(() {
+        _startAppBannerAd = ad;
+      });
+    }).catchError((e) {
+      print("❌ Error loading StartApp banner: $e");
+    });
+  }
+
+  @override
+  void dispose() {
+    _firestoreSubscription?.cancel();
+    // _startAppBannerAd?.dispose(); // Liberar recursos del anuncio
+    super.dispose();
+  }
+
+  // 💰 INTERSTITIAL AD (Start.io)
+  StartAppInterstitialAd? _interstitialAd;
+
+  void _loadStartAppInterstitial() {
+    startAppSdk.loadInterstitialAd().then((ad) {
+      print("✅ Intersticial Cargado y listo.");
+      setState(() {
+        _interstitialAd = ad;
+      });
+    }).catchError((e) {
+      print("❌ Error cargando Intersticial: $e");
+    });
+  }
+
+  void _showInterstitialAd() {
+    if (_interstitialAd != null) {
+      _interstitialAd!.show().then((shown) {
+        if (shown) {
+          print("💰 Intersticial Mostrado");
+          _loadStartAppInterstitial(); // Precargar el siguiente
+        } else {
+             print("⚠️ Intersticial no se pudo mostrar.");
+        }
+      });
+    } else {
+      print("⚠️ El Intersticial no estaba listo aún.");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("⚠️ Anuncio Intersticial no listo todavía... cargando uno nuevo."))
+        );
+      }
+      _loadStartAppInterstitial(); // Intentar cargar de nuevo
+    }
+  }
+
   _onMapCreated(MapboxMap map) async {
     mapboxMap = map;
 
@@ -450,8 +476,8 @@ class _MapGameScreenState extends State<MapGameScreen> {
       await circleAnnotationManager?.create(CircleAnnotationOptions(
         geometry: Point(coordinates: Position(stop['lng'], stop['lat'])),
         circleColor: const Color(0xFFFF4081).value, // Rojo Rosado
-        circleRadius: 6.0, // TAMAÑO REDUCIDO (6.0)
-        circleStrokeWidth: 2.0, // Borde un poco más fino también
+        circleRadius: 6.0, 
+        circleStrokeWidth: 2.0, 
         circleStrokeColor: Colors.white.value,
       ));
     }
@@ -473,10 +499,15 @@ class _MapGameScreenState extends State<MapGameScreen> {
             selectedLongitude: centerPosition.lng.toDouble(), 
           ), 
         ), 
-      ).then((_) {
+      ).then((result) {
+        // Al volver de añadir el sitio...
         setState(() {
           _isSelectingLocation = false;
         });
+
+        // 💰 MOSTRAR ANUNCIO INTERSTICIAL AQUÍ
+        // Si el usuario guardó (result == true) o simplemente volvió, es un buen momento.
+        _showInterstitialAd();
       });
     }
   }
@@ -488,6 +519,8 @@ class _MapGameScreenState extends State<MapGameScreen> {
       selectedStop = null;
     });
   }
+
+  // ... (Resto del código) ...
 
   @override
   Widget build(BuildContext context) {
@@ -562,17 +595,18 @@ class _MapGameScreenState extends State<MapGameScreen> {
             ),
           ),
 
-        // 💰 BANNER AD (Top)
-        if (_isAdLoaded && _bannerAd != null)
+        // 💰 BANNER AD (START.IO)
+        if (_startAppBannerAd != null)
           Positioned(
-            top: 0,
-            left: 0,
+            top: 0, 
+            left: 0, 
             right: 0,
             child: SafeArea(
-              child: SizedBox(
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
+              child: Container(
+                color: Colors.white, 
+                height: 50, 
+                alignment: Alignment.center,
+                child: StartAppBanner(_startAppBannerAd!), 
               ),
             ),
           ),
